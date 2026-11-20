@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SONORA — поиск аудиофрагмента</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f4f2ee;color:#242424;margin:0;padding:24px}
+main{max-width:760px;margin:auto}.panel{background:white;padding:22px;border-radius:16px;margin:16px 0}
+h1{margin-bottom:6px}.muted{color:#666}.btn{border:0;border-radius:10px;padding:12px 18px;background:#292929;color:white;font-size:16px;cursor:pointer;margin:6px 4px 6px 0}
+.btn:disabled{opacity:.45}.result{padding:12px;background:#f2f2f2;border-radius:10px;margin:8px 0}
+input{max-width:100%}#status{white-space:pre-wrap}
+</style>
+</head>
+<body><main>
+<h1>SONORA</h1><p class="muted">Найди аудиофайл по короткому записанному фрагменту</p>
+<section class="panel">
+<h2>1. Добавь музыку в библиотеку</h2>
+<p>Выбери аудиофайлы, в которых сайт будет искать совпадение.</p>
+<form id="uploadForm"><input type="file" name="files" multiple accept="audio/*"><button class="btn">Загрузить файлы</button></form>
+<p id="uploadStatus" class="muted"></p>
+<h3>Уже загружено</h3>
+<ul>{% for track in tracks %}<li>{{ track }}</li>{% else %}<li>Пока файлов нет</li>{% endfor %}</ul>
+</section>
+<section class="panel">
+<h2>2. Запиши фрагмент</h2>
+<p>Нажми «Начать запись», включи нужную музыку рядом с микрофоном, затем останови запись.</p>
+<button class="btn" id="start">Начать запись</button><button class="btn" id="stop" disabled>Остановить</button>
+<p id="recordStatus" class="muted">Запись ещё не началась.</p>
+<button class="btn" id="search" disabled>Найти совпадение</button>
+<div id="results"></div>
+</section>
+<p class="muted">Это экспериментальный прототип: он сравнивает общий звуковой профиль и может ошибаться. Для более точного поиска понадобится улучшить алгоритм.</p>
+</main>
+<script>
+let recorder, chunks=[], audioBlob=null;
+const $=id=>document.getElementById(id);
+$("uploadForm").addEventListener("submit", async e=>{
+ e.preventDefault(); const fd=new FormData(e.target);
+ const r=await fetch("/upload",{method:"POST",body:fd}); const d=await r.json();
+ $("uploadStatus").textContent=d.count ? `Загружено файлов: ${d.count}. Обнови страницу, чтобы увидеть список.` : "Не удалось загрузить файлы. Проверь формат.";
+});
+$("start").onclick=async()=>{
+ try{
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  chunks=[]; recorder=new MediaRecorder(stream);
+  recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  recorder.onstop=()=>{audioBlob=new Blob(chunks,{type:recorder.mimeType||"audio/webm"});$("search").disabled=false;stream.getTracks().forEach(t=>t.stop());$("recordStatus").textContent="Фрагмент записан. Теперь нажми «Найти совпадение».";};
+  recorder.start();$("start").disabled=true;$("stop").disabled=false;$("recordStatus").textContent="Идёт запись…";
+ }catch(e){$("recordStatus").textContent="Не получилось включить микрофон. Разреши доступ к микрофону и открой сайт в поддерживаемом браузере.";}
+};
+$("stop").onclick=()=>{if(recorder&&recorder.state!=="inactive"){recorder.stop();$("start").disabled=false;$("stop").disabled=true;}};
+$("search").onclick=async()=>{
+ if(!audioBlob)return;const fd=new FormData();fd.append("audio",audioBlob,"recording.webm");
+ $("results").textContent="Ищу…";
+ try{const r=await fetch("/match",{method:"POST",body:fd});const d=await r.json();
+ if(d.error){$("results").textContent=d.error;return;}
+ $("results").innerHTML=d.results.length?d.results.map(x=>`<div class="result"><b>${x.name.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}</b> — условное сходство ${x.score}%</div>`).join(""):"В библиотеке пока нет подходящих файлов.";
+ }catch(e){$("results").textContent="Ошибка поиска. Проверь, что сервер запущен.";}
+};
+</script>
+</body></html>
