@@ -2,6 +2,7 @@
 Flask
 gunicorn
 numpy
+scipy
 librosa
 soundfile
 imageio-ffmpeg
