@@ -330,12 +330,11 @@ $("search").onclick=async()=>{
     }[char]));
 
     return `
-     <div class="result">
-      <b>🎵 ${name}</b>
-      <br>
-      Условное сходство: ${item.score}%
-     </div>
-    `;
+     return `<div class="result">
+<b>🎵 ${name}</b><br>
+Совпадение: ${item.score}%<br>
+Начало фрагмента в песне: ${Math.floor(item.position / 60)}:${String(Math.floor(item.position % 60)).padStart(2,"0")}
+</div>`;
 
    }).join("");
 
