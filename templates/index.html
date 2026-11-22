@@ -1,13 +1,19 @@
 
 <!doctype html>
 <html lang="ru">
+
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SONORA — поиск музыки</title>
+
+<title>SONORA — поиск музыкального фрагмента</title>
 
 <style>
-*{box-sizing:border-box}
+
+*{
+ box-sizing:border-box;
+}
+
 body{
  font-family:Arial,sans-serif;
  background:#f4f2ee;
@@ -15,15 +21,34 @@ body{
  margin:0;
  padding:24px;
 }
-main{max-width:760px;margin:auto}
+
+main{
+ max-width:760px;
+ margin:auto;
+}
+
+h1{
+ font-size:38px;
+ margin-bottom:5px;
+}
+
+h2{
+ margin-top:0;
+}
+
+.muted{
+ color:#666;
+ line-height:1.5;
+}
+
 .panel{
  background:white;
  padding:22px;
  border-radius:16px;
- margin:16px 0;
+ margin:18px 0;
+ box-shadow:0 3px 15px rgba(0,0,0,.04);
 }
-h1{margin-bottom:6px}
-.muted{color:#666}
+
 .btn{
  border:0;
  border-radius:10px;
@@ -34,37 +59,79 @@ h1{margin-bottom:6px}
  cursor:pointer;
  margin:6px 4px 6px 0;
 }
-.btn:disabled{opacity:.45;cursor:not-allowed}
-input{max-width:100%}
-#status{white-space:pre-wrap}
-.result{
- padding:12px;
- background:#f2f2f2;
- border-radius:10px;
- margin:8px 0;
+
+.btn:disabled{
+ opacity:.45;
+ cursor:not-allowed;
 }
+
+input{
+ max-width:100%;
+}
+
+input[type=file]{
+ display:block;
+ margin:15px 0;
+}
+
 .file-box{
- background:#f5f5f5;
- padding:12px;
+ background:#f3f3f3;
+ padding:13px;
  border-radius:10px;
  margin:8px 0;
  overflow-wrap:anywhere;
 }
-#uploadStatus,#recordStatus{white-space:pre-wrap}
+
+.result{
+ background:#f1f5f2;
+ padding:16px;
+ border-radius:12px;
+ margin:12px 0;
+ line-height:1.8;
+ overflow-wrap:anywhere;
+}
+
+#uploadStatus,
+#recordStatus,
+#results{
+ white-space:pre-wrap;
+ line-height:1.6;
+}
+
+#results{
+ margin-top:15px;
+}
+
+.footer{
+ font-size:13px;
+ color:#777;
+ line-height:1.5;
+}
+
 </style>
 </head>
 
 <body>
+
 <main>
 
 <h1>SONORA</h1>
-<p class="muted">Найди музыкальный фрагмент внутри загруженных композиций.</p>
+
+<p class="muted">
+Поиск музыкального фрагмента внутри загруженных композиций.
+</p>
+
+
+<!-- ЗАГРУЗКА МУЗЫКИ -->
 
 <section class="panel">
 
-<h2>1. Добавь музыку в библиотеку</h2>
+<h2>1. Музыкальная библиотека</h2>
 
-<p>Загрузи полные музыкальные композиции. Можно использовать MP3.</p>
+<p class="muted">
+Сначала загрузи полные песни, в которых нужно искать фрагмент.
+Поддерживается MP3 и другие популярные аудиоформаты.
+</p>
 
 <form id="uploadForm">
 
@@ -73,12 +140,14 @@ input{max-width:100%}
  id="musicFiles"
  name="files"
  multiple
- accept=".mp3,.wav,.m4a,.aac,.ogg,.flac,.webm,audio/*"
+ accept=".mp3,.wav,.m4a,.aac,.ogg,.flac,.webm,.mp4,audio/*"
 >
 
-<br><br>
-
-<button class="btn" type="submit" id="uploadButton">
+<button
+ class="btn"
+ type="submit"
+ id="uploadButton"
+>
 Загрузить музыку
 </button>
 
@@ -86,38 +155,67 @@ input{max-width:100%}
 
 <p id="uploadStatus" class="muted"></p>
 
-<h3>Моя музыкальная библиотека</h3>
+<h3>Загруженные композиции</h3>
 
 <div id="trackList">
+
 {% for track in tracks %}
-<div class="file-box">🎵 {{ track }}</div>
+
+<div class="file-box">
+🎵 {{ track }}
+</div>
+
 {% else %}
-<p class="muted">Пока нет загруженных композиций.</p>
+
+<p class="muted">
+Музыкальная библиотека пока пуста.
+</p>
+
 {% endfor %}
+
 </div>
 
 </section>
 
+
+<!-- ЗАПИСЬ ФРАГМЕНТА -->
+
 <section class="panel">
 
-<h2>2. Запиши музыкальный фрагмент</h2>
+<h2>2. Запись музыкального фрагмента</h2>
 
-<p>
-Нажми «Начать запись», включи нужную музыку рядом с микрофоном,
-а затем нажми «Остановить».
+<p class="muted">
+Включи музыку рядом с микрофоном или используй подходящий источник звука.
+Запиши фрагмент, который хочешь найти в библиотеке.
 </p>
 
-<button class="btn" id="start">Начать запись</button>
+<button
+ class="btn"
+ id="start"
+ type="button"
+>
+Начать запись
+</button>
 
-<button class="btn" id="stop" disabled>
-Остановить
+<button
+ class="btn"
+ id="stop"
+ type="button"
+ disabled
+>
+Остановить запись
 </button>
 
 <p id="recordStatus" class="muted">
 Запись ещё не началась.
 </p>
 
-<button class="btn" id="search" disabled>
+<button
+ class="btn"
+ id="search"
+ type="button"
+ disabled
+>
 Найти совпадение
 </button>
 
@@ -125,238 +223,330 @@ input{max-width:100%}
 
 </section>
 
-<p class="muted">
-SONORA — экспериментальный прототип. Точность распознавания
-пока ограничена и будет улучшаться.
+
+<p class="footer">
+SONORA — экспериментальная система поиска музыкальных совпадений.
+Результаты зависят от качества записи, длины фрагмента и наличия
+исходной композиции в библиотеке.
 </p>
 
 </main>
 
+
 <script>
 
-let recorder;
-let chunks=[];
-let audioBlob=null;
+// ОСНОВНЫЕ ПЕРЕМЕННЫЕ
 
-const $=id=>document.getElementById(id);
+let recorder = null;
+let chunks = [];
+let audioBlob = null;
 
-// ЗАГРУЗКА МУЗЫКИ
+const $ = id => document.getElementById(id);
 
-$("uploadForm").addEventListener("submit",async e=>{
 
- e.preventDefault();
+// ЭКРАННАЯ ЗАГРУЗКА МУЗЫКИ
 
- const files=$("musicFiles").files;
+$("uploadForm").addEventListener("submit", async event => {
+
+ event.preventDefault();
+
+ const files = $("musicFiles").files;
 
  if(!files.length){
-  $("uploadStatus").textContent="Сначала выбери музыкальные файлы.";
+
+  $("uploadStatus").textContent =
+  "Сначала выбери MP3 или другой музыкальный файл.";
+
   return;
+
  }
 
- const fd=new FormData();
+ const formData = new FormData();
 
  for(const file of files){
-  fd.append("files",file);
+
+  formData.append("files",file);
+
  }
 
- $("uploadButton").disabled=true;
- $("uploadStatus").textContent="Загружаю музыку...";
+ $("uploadButton").disabled = true;
+
+ $("uploadStatus").textContent =
+ "Загружаю музыкальные композиции...";
 
  try{
 
-  const response=await fetch("/upload",{
+  const response = await fetch("/upload",{
    method:"POST",
-   body:fd
+   body:formData
   });
 
-  const data=await response.json();
+  const data = await response.json();
 
   if(!response.ok){
-   throw new Error(data.error||"Ошибка загрузки.");
+
+   throw new Error(
+    data.error || "Не удалось загрузить файлы."
+   );
+
   }
 
-  if(data.count>0){
+  if(data.count > 0){
 
-   $("uploadStatus").textContent=
-   "Успешно загружено файлов: "+data.count;
+   $("uploadStatus").textContent =
+   "Успешно загружено файлов: " + data.count +
+   ". Обновляю библиотеку...";
 
-   // Обновляем страницу, чтобы показать новые композиции
-   setTimeout(()=>location.reload(),1200);
+   setTimeout(()=>{
+    location.reload();
+   },1200);
 
   }else{
 
-   $("uploadStatus").textContent=
-   data.errors?.join("\n")||
-   "Файлы не загружены. Проверь формат файлов.";
+   $("uploadStatus").textContent =
+   data.errors?.join("\n") ||
+   "Файлы не загружены. Проверь формат.";
 
   }
 
  }catch(error){
 
-  $("uploadStatus").textContent=
-  "Ошибка загрузки: "+error.message;
+  $("uploadStatus").textContent =
+  "Ошибка загрузки: " + error.message;
 
  }finally{
 
-  $("uploadButton").disabled=false;
+  $("uploadButton").disabled = false;
 
  }
 
 });
 
+
 // НАЧАЛО ЗАПИСИ
 
-$("start").onclick=async()=>{
+$("start").addEventListener("click",async()=>{
 
  try{
 
-  const stream=await navigator.mediaDevices.getUserMedia({
+  if(!navigator.mediaDevices ||
+     !navigator.mediaDevices.getUserMedia){
+
+   throw new Error("Браузер не поддерживает запись.");
+
+  }
+
+  const stream =
+  await navigator.mediaDevices.getUserMedia({
    audio:true
   });
 
-  chunks=[];
-  audioBlob=null;
-  $("search").disabled=true;
+  chunks = [];
+  audioBlob = null;
 
-  const mimeTypes=[
+  $("search").disabled = true;
+
+  let mimeType = "";
+
+  const formats = [
    "audio/webm;codecs=opus",
    "audio/webm",
    "audio/mp4"
   ];
 
-  const mimeType=mimeTypes.find(type=>
-   MediaRecorder.isTypeSupported(type)
-  );
+  for(const format of formats){
 
-  recorder=mimeType?
-   new MediaRecorder(stream,{mimeType}):
-   new MediaRecorder(stream);
+   if(MediaRecorder.isTypeSupported(format)){
 
-  recorder.ondataavailable=e=>{
-   if(e.data.size){
-    chunks.push(e.data);
+    mimeType = format;
+    break;
+
    }
+
+  }
+
+  recorder = mimeType
+   ? new MediaRecorder(stream,{mimeType})
+   : new MediaRecorder(stream);
+
+  recorder.ondataavailable = event => {
+
+   if(event.data.size > 0){
+
+    chunks.push(event.data);
+
+   }
+
   };
 
-  recorder.onstop=()=>{
+  recorder.onstop = () => {
 
-   audioBlob=new Blob(chunks,{
-    type:recorder.mimeType||"audio/webm"
+   audioBlob = new Blob(chunks,{
+    type:recorder.mimeType || "audio/webm"
    });
 
-   $("search").disabled=false;
+   $("search").disabled = false;
 
-   stream.getTracks().forEach(track=>track.stop());
+   stream.getTracks().forEach(track=>{
+    track.stop();
+   });
 
-   $("recordStatus").textContent=
-   "Фрагмент записан! Теперь нажми «Найти совпадение».";
+   $("recordStatus").textContent =
+   "Фрагмент записан. Теперь нажми «Найти совпадение».";
 
   };
 
   recorder.start();
 
-  $("start").disabled=true;
-  $("stop").disabled=false;
+  $("start").disabled = true;
+  $("stop").disabled = false;
 
-  $("recordStatus").textContent="Идёт запись...";
+  $("recordStatus").textContent =
+  "Идёт запись...";
 
  }catch(error){
 
-  $("recordStatus").textContent=
-  "Не удалось включить микрофон. Разреши доступ к микрофону.";
+  $("recordStatus").textContent =
+  "Не удалось включить микрофон. Разреши доступ к нему. " +
+  error.message;
 
  }
 
-};
+});
+
 
 // ОСТАНОВКА ЗАПИСИ
 
-$("stop").onclick=()=>{
+$("stop").addEventListener("click",()=>{
 
- if(recorder&&recorder.state!=="inactive"){
+ if(recorder && recorder.state !== "inactive"){
 
   recorder.stop();
 
-  $("start").disabled=false;
-  $("stop").disabled=true;
+  $("start").disabled = false;
+  $("stop").disabled = true;
 
  }
 
-};
+});
 
-// ПОИСК МУЗЫКИ
 
-$("search").onclick=async()=>{
+// ПОИСК ТОЧНОГО ИСХОДНОГО ФАЙЛА
 
- if(!audioBlob)return;
+$("search").addEventListener("click",async()=>{
 
- const fd=new FormData();
+ if(!audioBlob){
 
- const extension=audioBlob.type.includes("mp4")?"mp4":"webm";
+  $("results").textContent =
+  "Сначала запиши музыкальный фрагмент.";
 
- fd.append("audio",audioBlob,"recording."+extension);
+  return;
 
- $("search").disabled=true;
- $("results").textContent="Ищу совпадение...";
+ }
+
+ const formData = new FormData();
+
+ let extension = "webm";
+
+ if(audioBlob.type.includes("mp4")){
+
+  extension = "mp4";
+
+ }
+
+ formData.append(
+  "audio",
+  audioBlob,
+  "recording." + extension
+ );
+
+ $("search").disabled = true;
+
+ $("results").textContent =
+ "Анализирую аудио. Ищу совпадение в музыкальной библиотеке...";
 
  try{
 
-  const response=await fetch("/match",{
+  const response = await fetch("/match",{
    method:"POST",
-   body:fd
+   body:formData
   });
 
-  const data=await response.json();
+  const data = await response.json();
 
-  if(!response.ok||data.error){
+  if(!response.ok || data.error){
 
-   $("results").textContent=
-   data.error||"Ошибка поиска.";
+   $("results").textContent =
+   data.error || "Ошибка поиска.";
 
    return;
 
   }
 
-  if(data.results&&data.results.length){
+  if(data.results && data.results.length){
 
-   $("results").innerHTML=data.results.map(item=>{
+   $("results").innerHTML = data.results.map(item=>{
 
-    const name=item.name.replace(/[&<>"']/g,char=>({
-     "&":"&amp;",
-     "<":"&lt;",
-     ">":"&gt;",
-     '"':"&quot;",
-     "'":"&#39;"
-    }[char]));
+    const name = String(item.name).replace(
+     /[&<>"']/g,
+     char=>({
+      "&":"&amp;",
+      "<":"&lt;",
+      ">":"&gt;",
+      '"':"&quot;",
+      "'":"&#39;"
+     }[char])
+    );
+
+    const position = Math.max(
+     0,
+     Number(item.position) || 0
+    );
+
+    const minutes = Math.floor(position / 60);
+
+    const seconds = String(
+     Math.floor(position % 60)
+    ).padStart(2,"0");
 
     return `
-     return `<div class="result">
-<b>🎵 ${name}</b><br>
-Совпадение: ${item.score}%<br>
-Начало фрагмента в песне: ${Math.floor(item.position / 60)}:${String(Math.floor(item.position % 60)).padStart(2,"0")}
-</div>`;
+     <div class="result">
+
+      <b>🎵 ${name}</b>
+
+      <br>
+
+      Совпадение: ${item.score}%
+
+      <br>
+
+      Начало фрагмента в песне:
+      <b>${minutes}:${seconds}</b>
+
+     </div>
+    `;
 
    }).join("");
 
   }else{
 
-   $("results").textContent=
-   "Совпадений не найдено. Попробуй другой фрагмент.";
+   $("results").textContent =
+   data.message || "Совпадение не найдено.";
 
   }
 
  }catch(error){
 
-  $("results").textContent=
-  "Ошибка поиска. Проверь работу сервера.";
+  $("results").textContent =
+  "Не удалось выполнить поиск. Проверь работу сервера.";
 
  }finally{
 
-  $("search").disabled=false;
+  $("search").disabled = false;
 
  }
 
-};
+});
 
 </script>
 
