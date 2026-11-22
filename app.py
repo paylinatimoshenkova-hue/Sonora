@@ -1,47 +1,44 @@
 
 import os
+import json
 import uuid
 import subprocess
 import tempfile
-
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify
-from werkzeug.utils import secure_filename
+from collections import defaultdict, Counter
+
 import numpy as np
 import librosa
 import imageio_ffmpeg
+
+from flask import Flask, render_template, request, jsonify
+from werkzeug.utils import secure_filename
+from scipy.ndimage import maximum_filter
 
 
 app = Flask(__name__)
 
 BASE = Path(__file__).parent
 LIBRARY = BASE / "library"
-LIBRARY.mkdir(exist_ok=True)
+INDEXES = BASE / "fingerprints"
 
-# Максимальный размер одного запроса — 100 МБ
+LIBRARY.mkdir(exist_ok=True)
+INDEXES.mkdir(exist_ok=True)
+
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
 
-# Поддерживаемые форматы
 ALLOWED = {
-    ".mp3",
-    ".wav",
-    ".m4a",
-    ".aac",
-    ".ogg",
-    ".flac",
-    ".webm",
-    ".mp4"
+    ".mp3", ".wav", ".m4a", ".aac",
+    ".ogg", ".flac", ".webm", ".mp4"
 }
 
-SAMPLE_RATE = 22050
+SR = 11025
+HOP = 256
+N_FFT = 2048
 
 
-def convert_to_wav(source_path):
-    """
-    Конвертирует MP3 и другие аудиоформаты в WAV
-    с помощью FFmpeg.
-    FFmpeg устанавливается вместе с imageio-ffmpeg.
-    """
+def convert_audio(source):
+    """Преобразует аудио в WAV для анализа."""
 
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -49,19 +46,17 @@ def convert_to_wav(source_path):
         suffix=".wav",
         delete=False
     )
-
-    wav_path = temp.name
+    output = temp.name
     temp.close()
 
     command = [
-        ffmpeg,
-        "-y",
-        "-i", str(source_path),
+        ffmpeg, "-y",
+        "-i", str(source),
         "-vn",
         "-ac", "1",
-        "-ar", str(SAMPLE_RATE),
+        "-ar", str(SR),
         "-f", "wav",
-        wav_path
+        output
     ]
 
     try:
@@ -73,75 +68,163 @@ def convert_to_wav(source_path):
         )
 
         if result.returncode != 0:
-            error = result.stderr.decode(
-                "utf-8",
-                errors="ignore"
-            )
             raise ValueError(
-                "Не удалось декодировать аудио: " + error[-500:]
+                result.stderr.decode(
+                    "utf-8", errors="ignore"
+                )[-500:]
             )
 
-        return wav_path
+        return output
 
     except Exception:
-        Path(wav_path).unlink(missing_ok=True)
+        Path(output).unlink(missing_ok=True)
         raise
 
 
-def fingerprint(path):
+def make_fingerprint(source):
     """
-    Создаёт звуковой отпечаток композиции.
+    Создаёт звуковые отпечатки из пар
+    спектральных пиков.
     """
 
-    wav_path = convert_to_wav(path)
+    wav = convert_audio(source)
 
     try:
-        y, sr = librosa.load(
-            wav_path,
-            sr=SAMPLE_RATE,
+        audio, sr = librosa.load(
+            wav,
+            sr=SR,
             mono=True
         )
 
-        if len(y) < sr:
+        if len(audio) < sr:
             raise ValueError(
-                "Аудиофайл слишком короткий. Нужно минимум 1 секунду."
+                "Аудио должно быть длиннее одной секунды."
             )
 
-        chroma = librosa.feature.chroma_stft(
-            y=y,
-            sr=sr,
-            hop_length=512
+        spectrum = np.abs(
+            librosa.stft(
+                audio,
+                n_fft=N_FFT,
+                hop_length=HOP
+            )
         )
 
-        profile = np.mean(chroma, axis=1)
+        db = librosa.amplitude_to_db(
+            spectrum,
+            ref=np.max
+        )
 
-        return profile
+        local_max = maximum_filter(
+            db,
+            size=(9, 9)
+        )
+
+        mask = (
+            (db == local_max) &
+            (db > -45)
+        )
+
+        freq_bins, frames = np.where(mask)
+
+        # Убираем очень низкие частоты
+        selected = [
+            (int(f), int(t))
+            for f, t in zip(freq_bins, frames)
+            if f >= 5
+        ]
+
+        # Ограничиваем количество пиков
+        selected.sort(key=lambda x: x[1])
+
+        peaks_by_time = defaultdict(list)
+
+        for freq, frame in selected:
+            peaks_by_time[frame].append(freq)
+
+        peaks = []
+
+        for frame, freqs in peaks_by_time.items():
+            for freq in freqs[:5]:
+                peaks.append((freq, frame))
+
+        peaks.sort(key=lambda x: x[1])
+
+        fingerprints = defaultdict(list)
+
+        for i, (f1, t1) in enumerate(peaks):
+
+            future = []
+
+            for f2, t2 in peaks[i + 1:]:
+
+                delta = t2 - t1
+
+                if delta > 10:
+                    break
+
+                if delta >= 1:
+                    future.append((f2, delta))
+
+            for f2, delta in future[:5]:
+
+                key = f"{f1}:{f2}:{delta}"
+
+                time_seconds = round(
+                    t1 * HOP / SR,
+                    3
+                )
+
+                fingerprints[key].append(
+                    time_seconds
+                )
+
+        return dict(fingerprints)
 
     finally:
-        Path(wav_path).unlink(missing_ok=True)
+        Path(wav).unlink(missing_ok=True)
 
 
-def similarity(a, b):
-    """
-    Сравнивает два звуковых отпечатка.
-    """
+def get_track_index(track):
+    """Загружает сохранённый индекс или создаёт новый."""
 
-    denominator = np.linalg.norm(a) * np.linalg.norm(b)
+    index_file = INDEXES / (track.name + ".json")
 
-    if denominator == 0:
-        return 0.0
+    modified = track.stat().st_mtime
 
-    score = np.dot(a, b) / denominator
+    if index_file.exists():
 
-    return float(np.clip(score, 0, 1))
+        try:
+            data = json.loads(
+                index_file.read_text(encoding="utf-8")
+            )
+
+            if data.get("modified") == modified:
+                return data["fingerprints"]
+
+        except Exception:
+            pass
+
+    fingerprints = make_fingerprint(track)
+
+    data = {
+        "modified": modified,
+        "fingerprints": fingerprints
+    }
+
+    index_file.write_text(
+        json.dumps(data),
+        encoding="utf-8"
+    )
+
+    return fingerprints
 
 
 @app.get("/")
 def index():
+
     tracks = sorted(
-        p.name
-        for p in LIBRARY.iterdir()
-        if p.is_file()
+        p.name for p in LIBRARY.iterdir()
+        if p.is_file() and p.suffix.lower() in ALLOWED
     )
 
     return render_template(
@@ -152,44 +235,40 @@ def index():
 
 @app.post("/upload")
 def upload():
-    """
-    Загружает несколько музыкальных композиций.
-    """
 
-    items = request.files.getlist("files")
+    files = request.files.getlist("files")
 
-    if not items:
+    if not files:
         return jsonify({
-            "error": "Ты не выбрал файлы."
+            "error": "Файлы не выбраны."
         }), 400
 
     saved = []
     errors = []
 
-    for item in items:
+    for file in files:
 
-        if not item or not item.filename:
+        if not file or not file.filename:
             continue
 
-        original_name = secure_filename(item.filename)
-
-        if not original_name:
-            errors.append("Некорректное имя файла.")
-            continue
-
-        ext = Path(original_name).suffix.lower()
+        name = secure_filename(file.filename)
+        ext = Path(name).suffix.lower()
 
         if ext not in ALLOWED:
             errors.append(
-                f"{original_name}: формат не поддерживается."
+                f"{name}: формат не поддерживается."
             )
             continue
 
-        unique_name = f"{uuid.uuid4().hex[:10]}_{original_name}"
+        unique_name = (
+            uuid.uuid4().hex[:8] + "_" + name
+        )
+
         target = LIBRARY / unique_name
 
         try:
-            item.save(target)
+
+            file.save(target)
 
             if not target.exists() or target.stat().st_size == 0:
                 raise ValueError("Файл пустой.")
@@ -197,8 +276,9 @@ def upload():
             saved.append(unique_name)
 
         except Exception as e:
+
             target.unlink(missing_ok=True)
-            errors.append(f"{original_name}: {str(e)}")
+            errors.append(f"{name}: {str(e)}")
 
     return jsonify({
         "saved": saved,
@@ -209,10 +289,6 @@ def upload():
 
 @app.post("/match")
 def match():
-    """
-    Принимает запись с микрофона и ищет
-    наиболее похожие композиции в библиотеке.
-    """
 
     clip = request.files.get("audio")
 
@@ -228,45 +304,90 @@ def match():
             "error": "Формат записи не поддерживается."
         }), 400
 
-    temp_path = BASE / f"clip_{uuid.uuid4().hex}{ext}"
+    temp = BASE / (
+        "clip_" + uuid.uuid4().hex + ext
+    )
 
     try:
-        clip.save(temp_path)
 
-        query = fingerprint(temp_path)
+        clip.save(temp)
+
+        query = make_fingerprint(temp)
+
+        query_count = sum(
+            len(times) for times in query.values()
+        )
+
+        if query_count < 10:
+            return jsonify({
+                "error": (
+                    "Слишком мало звуковых данных. "
+                    "Запиши фрагмент подольше."
+                )
+            }), 400
 
         results = []
 
-        for path in LIBRARY.iterdir():
+        for track in LIBRARY.iterdir():
 
-            if not path.is_file():
+            if not track.is_file():
                 continue
 
-            if path.suffix.lower() not in ALLOWED:
+            if track.suffix.lower() not in ALLOWED:
                 continue
 
             try:
-                track_profile = fingerprint(path)
 
-                score = similarity(
-                    query,
-                    track_profile
+                reference = get_track_index(track)
+
+                offsets = []
+
+                for key, query_times in query.items():
+
+                    reference_times = reference.get(key, [])
+
+                    for qt in query_times:
+                        for rt in reference_times:
+                            offsets.append(round(rt - qt, 1))
+
+                if not offsets:
+                    continue
+
+                histogram = Counter(offsets)
+
+                best_offset, matches = histogram.most_common(1)[0]
+
+                score = round(
+                    matches / max(query_count, 1) * 100,
+                    1
                 )
 
-                results.append({
-                    "name": path.name,
-                    "score": round(score * 100, 1)
-                })
+                if matches >= 5:
+
+                    results.append({
+                        "name": track.name,
+                        "score": min(score, 100),
+                        "position": max(0, best_offset)
+                    })
 
             except Exception as e:
+
                 print(
-                    f"Ошибка обработки {path.name}: {e}"
+                    "Ошибка обработки",
+                    track.name,
+                    str(e)
                 )
 
         results.sort(
-            key=lambda x: x["score"],
+            key=lambda item: item["score"],
             reverse=True
         )
+
+        if not results:
+            return jsonify({
+                "results": [],
+                "message": "Совпадение не найдено."
+            })
 
         return jsonify({
             "results": results[:5]
@@ -277,27 +398,24 @@ def match():
         print("Ошибка поиска:", str(e))
 
         return jsonify({
-            "error": (
-                "Не удалось обработать аудио. "
-                "Попробуй другой файл или запись. "
-                + str(e)
-            )
+            "error": "Ошибка обработки аудио: " + str(e)
         }), 400
 
     finally:
-        temp_path.unlink(missing_ok=True)
+        temp.unlink(missing_ok=True)
 
 
 @app.errorhandler(413)
-def file_too_large(error):
+def too_large(error):
+
     return jsonify({
-        "error": "Файл слишком большой. Максимальный размер — 100 МБ."
+        "error": "Файл слишком большой. Максимум 100 МБ."
     }), 413
 
 
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
-        debug=False
+        port=int(os.environ.get("PORT", 5000))
     )
